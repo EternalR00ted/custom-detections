@@ -1,0 +1,47 @@
+# Shadow run: once a day, counts what each rule in testing would have caught
+# over the last 3 days, with the lab VM left out. Counts only. Opens a
+# promotion pull request for each rule that has spent 7 days in testing with
+# zero hits. Remove --propose below to stop the promotion pull requests.
+
+trigger: none
+pr: none
+
+schedules:
+- cron: '41 12 * * *'
+  displayName: Daily at 12:41 UTC
+  branches:
+    include:
+    - main
+  always: true
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+- group: detections
+
+jobs:
+- job: shadow
+  displayName: Shadow run
+  timeoutInMinutes: 30
+  steps:
+  - checkout: self
+    fetchDepth: 0
+    persistCredentials: true
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+
+  - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+    displayName: Install dependencies
+
+  - task: AzureCLI@2
+    displayName: Count hits for rules in testing, propose promotions
+    inputs:
+      azureSubscription: detections-read
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: python -m scripts.shadow --propose
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

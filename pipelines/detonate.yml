@@ -1,0 +1,156 @@
+# Lab detonation: an optional check on pull requests into main. Queue it from
+# the pull request's Checks list. It runs the allowlisted Atomic Red Team tests
+# the changed rules list, on the lab VM, and checks each rule caught them.
+#
+# Stage 1 posts the fire plan on the pull request: target VM, every command,
+# each test's tier, pre-flight checks, and the plan's SHA-256.
+# Stage 2 uses the detections-detonate service connection, which has an
+# approval check and an exclusive lock. So nothing runs until you approve it,
+# like CCCS, where a person approved each detonation. It checks the plan
+# didn't change, starts the VM, runs the plan and deallocates the VM. A second
+# job waits for telemetry and counts each rule's hits per test. Each job stays
+# under the free tier's 60 minutes.
+
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+- group: detections
+
+stages:
+- stage: plan
+  displayName: Fire plan
+  jobs:
+  - job: plan
+    displayName: Build the fire plan and run the pre-flight checks
+    timeoutInMinutes: 20
+    steps:
+    - checkout: self
+      fetchDepth: 2
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+
+    - bash: |
+        case "$PR_ID" in
+          ''|*[!0-9]*)
+            echo "##vso[task.logissue type=error]Queue Lab detonation from a pull request's Checks list."
+            exit 1 ;;
+        esac
+        python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+      displayName: Install dependencies
+      env:
+        PR_ID: $(System.PullRequest.PullRequestId)
+
+    - task: AzureCLI@2
+      name: fp
+      displayName: Build the fire plan
+      inputs:
+        azureSubscription: detections-read
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: python -m scripts.fire_plan
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+    - bash: |
+        if [ ! -s work/fire-plan.md ]; then
+          mkdir -p work
+          printf '### Fire plan (lab detonation)\n\nThe plan could not be built. Open the pipeline run to see why.\n' > work/fire-plan.md
+        fi
+        python -m scripts.ado comment --pr "$PR_ID" --file work/fire-plan.md
+      displayName: Post the fire plan on the pull request
+      condition: always()
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        PR_ID: $(System.PullRequest.PullRequestId)
+
+- stage: detonate
+  displayName: Detonate (waits for your approval)
+  dependsOn: plan
+  condition: and(succeeded(), ne(dependencies.plan.outputs['plan.fp.steps'], '0'))
+  lockBehavior: sequential
+  variables:
+    approvedSha: $[ stageDependencies.plan.plan.outputs['fp.sha256'] ]
+  jobs:
+  - job: run
+    displayName: Check the plan, start the VM, staging check, run the tests
+    timeoutInMinutes: 50
+    steps:
+    - checkout: self
+      fetchDepth: 2
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+
+    - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+      displayName: Install dependencies
+
+    - task: AzureCLI@2
+      displayName: Run the approved plan on the lab VM
+      inputs:
+        azureSubscription: detections-detonate
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          python -m scripts.fire_plan --no-target --expect-sha256 "$APPROVED"
+          python -m scripts.detonate --resource-group "$LAB_RESOURCE_GROUP" --vm "$LAB_VM"
+      env:
+        APPROVED: $(approvedSha)
+
+    - task: PublishPipelineArtifact@1
+      displayName: Keep the run record
+      condition: always()
+      inputs:
+        targetPath: work/detonations.json
+        artifact: detonations
+
+  - job: verify
+    displayName: Wait for telemetry, count hits per test
+    dependsOn: run
+    condition: succeededOrFailed()
+    timeoutInMinutes: 55
+    steps:
+    - checkout: self
+      fetchDepth: 2
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+
+    - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+      displayName: Install dependencies
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Get the run record
+      inputs:
+        buildType: current
+        artifactName: detonations
+        targetPath: $(Build.SourcesDirectory)/work
+
+    - task: AzureCLI@2
+      displayName: Count each rule's hits per test window
+      inputs:
+        azureSubscription: detections-read
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: python -m scripts.tp_check
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+    - bash: |
+        if [ ! -s work/tp-check.md ]; then
+          printf '### Lab detonation results\n\nNo results. Open the pipeline run to see what failed.\n' > work/tp-check.md
+        fi
+        python -m scripts.ado comment --pr "$PR_ID" --file work/tp-check.md
+      displayName: Post the results on the pull request
+      condition: always()
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        PR_ID: $(System.PullRequest.PullRequestId)

@@ -1,0 +1,17 @@
+# Threat intel the drafter reads. Each article link must be on the feed's
+# domain (or a subdomain of it), so a feed can't point the drafter anywhere
+# else. Add or remove feeds in a pull request.
+
+feeds:
+  - name: The DFIR Report
+    url: https://thedfirreport.com/feed/
+    domain: thedfirreport.com
+  - name: Microsoft Security Blog
+    url: https://www.microsoft.com/en-us/security/blog/feed/
+    domain: microsoft.com
+  - name: Red Canary blog
+    url: https://redcanary.com/blog/feed/
+    domain: redcanary.com
+  - name: Canadian Centre for Cyber Security alerts and advisories
+    url: https://www.cyber.gc.ca/api/cccs/rss/v1/get?feed=alerts_advisories&lang=en
+    domain: cyber.gc.ca

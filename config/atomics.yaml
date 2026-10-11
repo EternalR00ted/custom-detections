@@ -1,0 +1,43 @@
+# The only Atomic Red Team tests the lab VM may run. Add a test in its own
+# pull request, with the SHA-256 of its file at the pinned commit. The AI can
+# only pick tests from this list, and AI pull requests can't change it.
+#
+# The fire plan reads each test's command from the pinned file, checks the
+# file's SHA-256, and shows you the exact command before you approve.
+# Only tests with a powershell or command_prompt executor and no
+# dependencies are allowed.
+#
+# Tiers follow the Canadian Centre for Cyber Security's purple loop:
+#   baseline    the technique as the source describes it
+#   cosmetic    the same command with trivial changes (case, aliases, order)
+#   structural  the same effect through a different tool or path
+#   behavioral  a different behavior that reaches the same goal
+
+source:
+  repo: https://github.com/redcanaryco/atomic-red-team
+  commit: 388942adbd9641f4dfdcf079d7efe9a75ec0ac43
+
+files:
+  atomics/T1685/T1685.yaml: 42ce0f8b54b39e71ce017730a66c64c4a7cc14c22b3361e6f57f49482f166169
+
+tests:
+  - guid: 0b19f4ee-de90-4059-88cb-63c800c683ed
+    file: atomics/T1685/T1685.yaml
+    name: Tamper with Windows Defender Evade Scanning -Folder
+    tier: baseline
+    what_it_does: Adds a folder exclusion with Add-MpPreference, then removes it.
+  - guid: 315f4be6-2240-4552-b3e1-d1047f5eecea
+    file: atomics/T1685/T1685.yaml
+    name: Tamper with Windows Defender Evade Scanning -Extension
+    tier: baseline
+    what_it_does: Adds a file extension exclusion with Add-MpPreference, then removes it.
+  - guid: a123ce6a-3916-45d6-ba9c-7d4081315c27
+    file: atomics/T1685/T1685.yaml
+    name: Tamper with Windows Defender Evade Scanning -Process
+    tier: baseline
+    what_it_does: Adds a process exclusion with Add-MpPreference, then removes it.
+  - guid: 59d386fc-3a4b-41b8-850d-9e3eee24dfe4
+    file: atomics/T1685/T1685.yaml
+    name: WMIC Tamper with Windows Defender Evade Scanning Folder
+    tier: structural
+    what_it_does: Adds a folder exclusion through WMIC and the MSFT_MpPreference WMI class, then removes it.

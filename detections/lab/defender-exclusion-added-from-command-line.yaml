@@ -1,0 +1,51 @@
+id: defender-exclusion-added-from-command-line
+name: MDE - Defender exclusion added from the command line
+description: >-
+  A process added a Microsoft Defender Antivirus exclusion from PowerShell or
+  WMIC. Attackers add folder, extension or process exclusions so Defender
+  stops scanning their tools.
+severity: medium
+frequency: PT1H
+tactics:
+  - tactic: DefenseEvasion
+    techniques: [T1562.001]
+query: |
+  DeviceProcessEvents
+  | where FileName in~ ("powershell.exe", "pwsh.exe", "powershell_ise.exe", "wmic.exe")
+  | where ProcessCommandLine contains "MpPreference" and ProcessCommandLine contains "Exclusion"
+  | project Timestamp, DeviceId, DeviceName, ReportId, AccountName, AccountDomain, AccountSid,
+      FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine
+entities:
+  hosts:
+    - deviceIdColumn: DeviceId
+      nameColumn: DeviceName
+  accounts:
+    - nameColumn: AccountName
+      ntDomainColumn: AccountDomain
+      sidColumn: AccountSid
+recommended_actions: >-
+  Find out who added the exclusion and whether anyone on the team expected it.
+  List the device's current exclusions with Get-MpPreference. If nobody
+  expected it, remove the exclusion and run a full scan of the excluded
+  folder, extension or process.
+status: testing
+version: 1.0.0
+hunt_query: |
+  DeviceProcessEvents
+  | where ProcessCommandLine contains "MpPreference" or ProcessCommandLine contains "MSFT_MpPreference"
+  | summarize Count = count() by FileName, InitiatingProcessFileName
+lab_tests:
+  - 0b19f4ee-de90-4059-88cb-63c800c683ed
+  - 315f4be6-2240-4552-b3e1-d1047f5eecea
+  - a123ce6a-3916-45d6-ba9c-7d4081315c27
+  - 59d386fc-3a4b-41b8-850d-9e3eee24dfe4
+metadata:
+  author: Khalid Ozal
+  sources:
+    - https://attack.mitre.org/techniques/T1562/001/
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1685/T1685.yaml
+  attack_v19: [T1685]
+  notes: >-
+    Written by a person as the pipeline's first rule. Step 9 of the setup guide
+    runs it through every gate. ATT&CK v19 moved Disable or Modify Tools to
+    T1685; the tactics block keeps T1562.001 until Defender's mapping catches up.

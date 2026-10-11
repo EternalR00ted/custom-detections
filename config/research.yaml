@@ -1,0 +1,35 @@
+# Live web research with Nimble Search. Runs on every Draft rules run when
+# NIMBLE_API_KEY is set, next to the feeds in config/feeds.yaml.
+#
+# Only results from these domains are used. Nimble filters on them, and code
+# checks every result's URL again before anything reaches a model, so a
+# search can't pull in an arbitrary page.
+
+time_range: week
+results_per_query: 5
+
+queries:
+  - intrusion report attacker commands executed on Windows hosts
+  - ransomware operators living off the land techniques observed
+  - threat actor defense evasion technique seen in the wild
+  - new initial access technique endpoint telemetry analysis
+
+domains:
+  - thedfirreport.com
+  - microsoft.com
+  - redcanary.com
+  - cyber.gc.ca
+  - cisa.gov
+  - huntress.com
+  - elastic.co
+  - paloaltonetworks.com
+  - cloud.google.com
+  - securelist.com
+  - welivesecurity.com
+  - sophos.com
+  - talosintelligence.com
+  - trendmicro.com
+  - sentinelone.com
+  - proofpoint.com
+  - volexity.com
+  - crowdstrike.com

@@ -1,0 +1,67 @@
+# Draft rules: Nimble researches the live web for new threat reports (plus
+# the allowlisted feeds and the analyst write-ups in inputs/). Each new
+# article goes through triage, the CCCS purple loop (Claude writes, Claude
+# Fable attacks) and the model jury (Gemini and OpenAI review), then becomes
+# one pull request. Runs every weekday; run it by hand with one article URL
+# to draft only that article.
+
+trigger: none
+pr: none
+
+schedules:
+- cron: '17 11 * * 1-5'
+  displayName: Weekdays at 11:17 UTC
+  branches:
+    include:
+    - main
+  always: true
+
+parameters:
+- name: articleUrl
+  displayName: Article URL (leave as none to read the feeds)
+  type: string
+  default: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+- group: detections
+
+jobs:
+- job: draft
+  displayName: Draft rules
+  timeoutInMinutes: 60
+  steps:
+  - checkout: self
+    fetchDepth: 1
+    persistCredentials: true
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+
+  - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+    displayName: Install dependencies
+
+  - task: Cache@2
+    displayName: Articles already handled
+    inputs:
+      key: '"seen-articles" | "$(Build.BuildId)"'
+      restoreKeys: '"seen-articles"'
+      path: $(Pipeline.Workspace)/seen
+
+  - task: AzureCLI@2
+    displayName: Research, triage, purple loop, model jury, pull requests
+    inputs:
+      azureSubscription: detections-read
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: python -m scripts.draft --url "$ARTICLE_URL" --seen "$(Pipeline.Workspace)/seen/seen.json"
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
+      OPENAI_API_KEY: $(OPENAI_API_KEY)
+      GEMINI_API_KEY: $(GEMINI_API_KEY)
+      NIMBLE_API_KEY: $(NIMBLE_API_KEY)
+      ARTICLE_URL: ${{ parameters.articleUrl }}

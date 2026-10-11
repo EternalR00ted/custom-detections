@@ -1,0 +1,96 @@
+# What the pipeline is allowed to do. AI pull requests can't change this file:
+# Rule checks fails any ai/ branch that touches anything outside detections/ai/
+# and sigma/ai/.
+
+# Tables a rule may query, and the columns its results must include.
+# Custom detections on Defender for Endpoint tables need Timestamp, DeviceId
+# and ReportId so Defender can build the alert.
+tables:
+  DeviceProcessEvents: [Timestamp, DeviceId, ReportId]
+  DeviceNetworkEvents: [Timestamp, DeviceId, ReportId]
+  DeviceFileEvents: [Timestamp, DeviceId, ReportId]
+  DeviceRegistryEvents: [Timestamp, DeviceId, ReportId]
+  DeviceLogonEvents: [Timestamp, DeviceId, ReportId]
+  DeviceImageLoadEvents: [Timestamp, DeviceId, ReportId]
+  DeviceEvents: [Timestamp, DeviceId, ReportId]
+
+# Allowed values for rule fields.
+frequencies: [PT1H, PT3H, PT12H, P1D]
+severities: [informational, low, medium, high]
+sources: [MDE]
+tactics:
+  - InitialAccess
+  - Execution
+  - Persistence
+  - PrivilegeEscalation
+  - DefenseEvasion
+  - CredentialAccess
+  - Discovery
+  - LateralMovement
+  - Collection
+  - CommandAndControl
+  - Exfiltration
+  - Impact
+
+# KQL a rule may not use (matched without case). These reach outside Defender,
+# run plugins, or call other clusters and workspaces.
+blocked_kql:
+  - externaldata
+  - external_table
+  - http_request
+  - evaluate
+  - invoke
+  - "cluster("
+  - "database("
+  - "workspace("
+  - "app("
+  - "adx("
+
+# The production check on every pull request. CCCS ran each analytic over
+# 3 days of production data and the bar was zero hits.
+checks:
+  production_days: 3
+  max_hits: 0
+
+# Lab detonation timing. CCCS waited 10 minutes for telemetry before checking.
+lab:
+  initial_wait_minutes: 10
+  max_wait_minutes: 30
+  poll_seconds: 120
+  gap_seconds: 150
+  test_timeout_seconds: 300
+
+# The purple loop: red review, blue hardening, repeat.
+purple_loop:
+  max_rounds: 3
+  max_repairs: 2
+
+# When the shadow run proposes turning a rule on.
+promotion:
+  min_days_in_testing: 7
+  shadow_days: 3
+  max_hits: 0
+
+# Models from three families, as <family>:<model ID>. Each family is one API
+# key (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY). A list is tried in
+# order until one answers. blue, red and red_fallback are Claude model IDs.
+#   triage        screens each article
+#   blue          writes, repairs and hardens the rule (Claude, like CCCS)
+#   red           attacks the rule by tier (Claude Fable 5.1, Mythos-class)
+#   red_fallback  answers when the red side declines
+#   jury          independent reviewers from other families; each votes
+models:
+  triage: [gemini:gemini-3.8-flash, claude:claude-haiku-5-5]
+  blue: claude-opus-5-5
+  red: claude-fable-5-1
+  red_fallback: claude-opus-4-8  # Opus 5.5 declined the red-side prompt
+  jury: [gemini:gemini-3.8-flash, openai:gpt-6.1-sol]
+
+# Limits per Draft rules run. Three drafts keep the job under the free tier's
+# 60-minute limit.
+limits:
+  articles_per_run: 3
+  article_chars: 60000
+  max_output_tokens: 8000
+  feed_items: 10
+  max_age_days: 7

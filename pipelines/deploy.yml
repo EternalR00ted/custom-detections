@@ -1,0 +1,61 @@
+# Deploy rules: after a pull request is completed into main, deploys the rule
+# files that changed as Microsoft Defender XDR custom detections. Rules in
+# testing deploy turned off. Run it by hand with "Redeploy every rule" ticked
+# to redeploy them all. The detections-deploy service connection has a branch
+# control check, so only main can use it.
+
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - detections
+
+pr: none
+
+parameters:
+- name: deployAll
+  displayName: Redeploy every rule
+  type: boolean
+  default: false
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+- group: detections
+
+jobs:
+- job: deploy
+  displayName: Deploy rules to Defender
+  timeoutInMinutes: 30
+  steps:
+  - checkout: self
+    fetchDepth: 2
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+
+  - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+    displayName: Install dependencies
+
+  - bash: python -m scripts.rules detections
+    displayName: Static checks again before anything is deployed
+
+  - task: AzureCLI@2
+    displayName: Deploy
+    inputs:
+      azureSubscription: detections-deploy
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        if [ "$DEPLOY_ALL" = "True" ]; then
+          python -m scripts.deploy --all
+        else
+          python -m scripts.deploy --changed-since HEAD^1
+        fi
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      DEPLOY_ALL: ${{ parameters.deployAll }}

@@ -1,0 +1,49 @@
+# Rule checks: the required check on every pull request into main.
+# A build validation branch policy queues it (Step 8 of the setup guide).
+#
+# Guard rails on which files changed, static and Sigma checks, an advanced
+# hunting compile, the production check (3 days of real data, lab VM left
+# out, zero hits), then three model families review each changed rule: the
+# Claude red side by tier, and a Gemini and an OpenAI juror. Posts one
+# comment on the pull request. Only counts and column names leave advanced
+# hunting, never rows. The model reviews inform; they never fail the check.
+
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+- group: detections
+
+jobs:
+- job: checks
+  displayName: Rule checks
+  timeoutInMinutes: 30
+  steps:
+  - checkout: self
+    fetchDepth: 2
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+
+  - bash: python -m pip install --quiet --disable-pip-version-check -r requirements.txt
+    displayName: Install dependencies
+
+  - bash: python -m unittest discover --buffer --start-directory tests --top-level-directory .
+    displayName: Unit tests
+
+  - task: AzureCLI@2
+    displayName: Guard rails, static checks, hunting checks, model reviews
+    inputs:
+      azureSubscription: detections-read
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: python -m scripts.check_pr --red-review --jury --post
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)
+      OPENAI_API_KEY: $(OPENAI_API_KEY)
+      GEMINI_API_KEY: $(GEMINI_API_KEY)
